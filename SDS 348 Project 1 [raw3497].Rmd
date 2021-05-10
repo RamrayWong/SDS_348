@@ -1,0 +1,421 @@
+---
+title: "How Cost of Living and Population Statistics Reflect Demographic Stage."
+author: "Ramray Wong"
+eid: 'raw3497'
+date: "3/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Introduction
+#### We will be working with two data that share a common variable: country. The first dataset shows cost of living indexes per country and the second shows population statistics per country. Since it can be easily hypothesized that there is a relationship between urbanized popoulations and cost of living, the study of these two datasets should offer insight on the relationship between population status and costs of living. These relationships will be viewed through the lens of the demoggraphic transition model; each stage in the demographic transition model has its own characteristic population status. There are 5 stages. At stage 1 there is the lowest overall population and the highest death rate. As a country progresses to stage 5, population increases, and death rate is lower. The rate of population increases rapidly from 2 to 3 but then only increases slowly from stage 4 onward. This increase in population is supported by a country's ability to acquire and distribute resources to its population.
+
+```{r libs}
+# install.packages("kableExtra")
+library(tidyverse)
+library(kableExtra)
+```
+```{r datasets and join}
+populations <- read.csv('S:/S_download/population_by_country_2020.csv') # populations by country up to 2020, acquired from https://www.kaggle.com/eng0mohamed0nabil/population-by-country-2020
+
+costs <- read.csv('S:/S_download/Cost of living index by country 2020.csv') # cost of living index by country 2020, acquired from https://www.kaggle.com/dumbgeek/countries-dataset-2020
+
+glimpse(populations)
+glimpse(costs)
+populations <- populations %>% rename('Density (P/Km^2)' = `Density..P.KmÂ².`)
+pop_cost <- costs %>% left_join(populations, by=c('ï..Country'='Country..or.dependency.')) %>% 
+  rename(country = ï..Country)  # give country a more practical name
+   # use practical characters for this var name
+
+
+# Left join onto costs because costs has a better name for the Country column, and we do not want to get rid of the rows containing N/A. 
+```
+```{r migration}
+# create new col that denotes if a country had a net in or out migration or zero migration for 2020.
+pop_cost <- pop_cost %>% mutate(Net.in.or.out = ifelse(Migrants..net. > 0, 'in', ifelse(Migrants..net.==0, 'zero','out')))
+```
+
+```{r dplyr funcs}
+pop_cost %>% arrange(desc(Cost.of.Living.Index)) # arrange by cost of living in descending order. 
+pop_cost %>% select('country', 'Cost.of.Living.Index', 'Net.in.or.out') 
+# select country, cost of living index, and net in or out migration. 
+# Notice none of the top ten countries in COL index have an out migration rate.
+
+# Compare the mean fertility rate between countries with a net out migration vs net in migration.
+pop_cost %>% group_by(Net.in.or.out) %>% summarise(mean_fertility = mean(as.numeric(Fert..Rate)))
+# Countries with a net out migration have a higher fertility rate
+
+# filter for countries with Urban Pop % below 50 and then find their mean net migration for 2020.
+pop_cost %>% filter(as.numeric(sub(' %','',Urban.Pop..))<50) %>% summarise(mean_migration = mean(Migrants..net.))
+# The mean net migration for countries of Urban Population percentage below 50 is -69281.96	
+
+```
+
+# Summaries
+```{r means}
+pop_cost %>%
+  
+  # get means for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(mean_COL = mean(Cost.of.Living.Index, na.rm = TRUE),
+            mean_population = mean(Population..2020., na.rm = TRUE),
+            mean_rent_index = mean(Rent.Index, na.rm = TRUE), 
+            mean_groceries_index = mean(Groceries.Index, na.rm = TRUE),
+            mean_Urban_pop = mean(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            mean_Fert_rate = mean(as.numeric(Fert..Rate),na.rm = TRUE), 
+            mean_pop_density = mean(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+
+```
+#### The mean % Urban Pop is above half. This is expected as global populations have been shifting to more urban societies. 
+```{r sd}
+pop_cost %>%
+  
+  # get sd for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(sd_COL = sd(Cost.of.Living.Index, na.rm = TRUE),
+            sd_population = sd(Population..2020., na.rm = TRUE),
+            sd_rent_index = sd(Rent.Index, na.rm = TRUE), 
+            sd_groceries_index = sd(Groceries.Index, na.rm = TRUE),
+            sd_Urban_pop = sd(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            sd_Fert_rate = sd(as.numeric(Fert..Rate),na.rm = TRUE), 
+            sd_pop_density = sd(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+```{r var}
+pop_cost %>%
+  
+  # get var for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(var_COL = var(Cost.of.Living.Index, na.rm = TRUE),
+            var_population = var(Population..2020., na.rm = TRUE),
+            var_rent_index = var(Rent.Index, na.rm = TRUE), 
+            var_groceries_index = var(Groceries.Index, na.rm = TRUE),
+            var_Urban_pop = var(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            var_Fert_rate = var(as.numeric(Fert..Rate),na.rm = TRUE), 
+            var_pop_density = var(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+#### Variance among Cost of Living index is 338.74. This is reflective of different economic statuses of countries as well as their differing demographic stages. 
+```{r n}
+pop_cost %>%
+  
+  # get distinct vals for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(distinct_vals_COL = n_distinct(Cost.of.Living.Index, na.rm = TRUE),
+            distinct_vals_population = n_distinct(Population..2020., na.rm = TRUE),
+            distinct_vals_rent_index = n_distinct(Rent.Index, na.rm = TRUE), 
+            distinct_vals_groceries_index = n_distinct(Groceries.Index, na.rm = TRUE),
+            distinct_vals_Urban_pop = n_distinct(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            distinct_vals_Fert_rate = n_distinct(as.numeric(Fert..Rate),na.rm = TRUE), 
+            distinct_vals_pop_density = n_distinct(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+#### Some countries did not have data for population 2020 so they failed to be considered for distinct values. As well, fertility rate has fewer unique values since the measurement scale is more discrete than Urban population percentage, for example.
+```{r quantiles}
+pop_cost %>%
+  
+  # get quantiles for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(quantile_COL = quantile(Cost.of.Living.Index, na.rm = TRUE),
+            quantile_population = quantile(Population..2020., na.rm = TRUE),
+            quantile_rent_index = quantile(Rent.Index, na.rm = TRUE), 
+            quantile_groceries_index = quantile(Groceries.Index, na.rm = TRUE),
+            quantile_Urban_pop = quantile(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            quantile_Fert_rate = quantile(as.numeric(Fert..Rate),na.rm = TRUE), 
+            quantile_pop_density = quantile(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+
+# For the quantile table, the first row is at 0% followed by 25%, 50%, 75%, and 100% percentiles.
+```
+#### Quantiles for population density are very spread out ranging from 3 persons per square kilometer to 21645. This is reflective of countries in different development stages; as a country urbanizes, population tends to concentrate around urban centers and thus population density grows. 
+```{r mins}
+pop_cost %>%
+  
+  # get minimum vals for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(min_COL = min(Cost.of.Living.Index, na.rm = TRUE),
+            min_population = min(Population..2020., na.rm = TRUE),
+            min_rent_index = min(Rent.Index, na.rm = TRUE), 
+            min_groceries_index = min(Groceries.Index, na.rm = TRUE),
+            min_Urban_pop = min(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            min_Fert_rate = min(as.numeric(Fert..Rate),na.rm = TRUE), 
+            min_pop_density = min(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+#### The min fertility rate is 1.1 which means for that country, the average woman will bear 1 child if she were to live to the end of her child-bearing years. Typically, countries in more developed demographic stages see lower fertility
+```{r max}
+pop_cost %>%
+  
+  # get max vals for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(max_COL = max(Cost.of.Living.Index, na.rm = TRUE),
+            max_population = max(Population..2020., na.rm = TRUE),
+            max_rent_index = max(Rent.Index, na.rm = TRUE), 
+            max_groceries_index = max(Groceries.Index, na.rm = TRUE),
+            max_Urban_pop = max(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            max_Fert_rate = max(as.numeric(Fert..Rate),na.rm = TRUE), 
+            max_pop_density = max(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+#### Max population is 1.4 billion. This is typical for countries that have historically had a high fertility rate.
+
+# Summaries grouped by Net in or out migration.
+```{r means grouped}
+pop_cost %>%
+  group_by(Net.in.or.out) %>%
+  # get means for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(mean_COL = mean(Cost.of.Living.Index, na.rm = TRUE),
+            mean_population = mean(Population..2020., na.rm = TRUE),
+            mean_rent_index = mean(Rent.Index, na.rm = TRUE), 
+            mean_groceries_index = mean(Groceries.Index, na.rm = TRUE),
+            mean_Urban_pop = mean(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            mean_Fert_rate = mean(as.numeric(Fert..Rate),na.rm = TRUE), 
+            mean_pop_density = mean(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+
+```
+#### Mean Cost of living is higher for countries that bring more migration in. Though this may be counterintuitive, recall that more developed countries, which posess such costs of living, typically have pull factors such as better economic opportunity to yield more income.
+```{r sd grouped}
+pop_cost %>%
+  group_by(Net.in.or.out) %>%
+  # get sd for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(sd_COL = sd(Cost.of.Living.Index, na.rm = TRUE),
+            sd_population = sd(Population..2020., na.rm = TRUE),
+            sd_rent_index = sd(Rent.Index, na.rm = TRUE), 
+            sd_groceries_index = sd(Groceries.Index, na.rm = TRUE),
+            sd_Urban_pop = sd(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            sd_Fert_rate = sd(as.numeric(Fert..Rate),na.rm = TRUE), 
+            sd_pop_density = sd(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+#### Standard deviation for population for countries with a net out migration is considerably higher than that for net in migration countries. Since countries that bring migrants in tend to be more developed, their populations are more stable compared to their developing counterparts. 
+```{r var grouped}
+pop_cost %>%
+  group_by(Net.in.or.out) %>%
+  # get var for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(var_COL = var(Cost.of.Living.Index, na.rm = TRUE),
+            var_population = var(Population..2020., na.rm = TRUE),
+            var_rent_index = var(Rent.Index, na.rm = TRUE), 
+            var_groceries_index = var(Groceries.Index, na.rm = TRUE),
+            var_Urban_pop = var(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            var_Fert_rate = var(as.numeric(Fert..Rate),na.rm = TRUE), 
+            var_pop_density = var(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+```{r n grouped}
+pop_cost %>%
+  group_by(Net.in.or.out) %>%
+  # get distinct vals for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(distinct_vals_COL = n_distinct(Cost.of.Living.Index, na.rm = TRUE),
+            distinct_vals_population = n_distinct(Population..2020., na.rm = TRUE),
+            distinct_vals_rent_index = n_distinct(Rent.Index, na.rm = TRUE), 
+            distinct_vals_groceries_index = n_distinct(Groceries.Index, na.rm = TRUE),
+            distinct_vals_Urban_pop = n_distinct(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            distinct_vals_Fert_rate = n_distinct(as.numeric(Fert..Rate),na.rm = TRUE), 
+            distinct_vals_pop_density = n_distinct(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+#### Overall, distinct values are close to their respective n count. This is because the nature of these statistics is such that many of them are continuous numeric variables (such as urban pop %) while the discrete numerics measure large numbers which can vary greatly from one another.
+```{r quantiles grouped}
+pop_cost %>%
+  group_by(Net.in.or.out) %>%
+  # get quantiles for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(quantile_COL = quantile(Cost.of.Living.Index, na.rm = TRUE),
+            quantile_population = quantile(Population..2020., na.rm = TRUE),
+            quantile_rent_index = quantile(Rent.Index, na.rm = TRUE), 
+            quantile_groceries_index = quantile(Groceries.Index, na.rm = TRUE),
+            quantile_Urban_pop = quantile(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            quantile_Fert_rate = quantile(as.numeric(Fert..Rate),na.rm = TRUE), 
+            quantile_pop_density = quantile(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+
+# For the quantile table, the first row of net in/out/zero is at 0% followed by 25%, 50%, 75%, and 100% percentiles.
+```
+#### The inner quantiles for cost of living for out countries are closer than that of in countries.
+```{r mins grouped}
+pop_cost %>%
+  group_by(Net.in.or.out) %>%
+  # get minimum vals for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(min_COL = min(Cost.of.Living.Index, na.rm = TRUE),
+            min_population = min(Population..2020., na.rm = TRUE),
+            min_rent_index = min(Rent.Index, na.rm = TRUE), 
+            min_groceries_index = min(Groceries.Index, na.rm = TRUE),
+            min_Urban_pop = min(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            min_Fert_rate = min(as.numeric(Fert..Rate),na.rm = TRUE), 
+            min_pop_density = min(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+#### The minimum cost of living index for in countries is less than the maximum cost of living for out countries.
+
+```{r max grouped}
+pop_cost %>% 
+  group_by(Net.in.or.out) %>%
+  # get max vals for population, rent and groceries index, urban pop %, fertility rate, and pop density.
+  summarise(max_COL = max(Cost.of.Living.Index, na.rm = TRUE),
+            max_population = max(Population..2020., na.rm = TRUE),
+            max_rent_index = max(Rent.Index, na.rm = TRUE), 
+            max_groceries_index = max(Groceries.Index, na.rm = TRUE),
+            max_Urban_pop = max(as.numeric(sub(' %','',Urban.Pop..)),na.rm = TRUE), 
+            max_Fert_rate = max(as.numeric(Fert..Rate),na.rm = TRUE), 
+            max_pop_density = max(`Density (P/Km^2)`, na.rm = TRUE)) %>% 
+  
+  # use kable to make table
+  kbl() %>%
+  kable_classic(full_width = F, html_font = 'Arial') %>% kable_material()
+```
+#### the max pop. density for in countries is considerably higher than that of out countries.
+
+#### Each Variable has n = 132 except for Population 2020, Yearly Change, Net Change, Density, Land Area, Migrants.net, Fert.rate, Med.Age, Urban.pop, World.share, and Net.in.or.out. Those vars have n=127
+
+```{r numerics}
+pop_cost2 <- pop_cost 
+
+# convert percentages to numeric 
+pop_cost2$Yearly.Change <- as.numeric(sub(' %','', pop_cost2$Yearly.Change))
+pop_cost2$Urban.Pop.. <- as.numeric(sub(' %','', pop_cost2$Urban.Pop..))
+pop_cost2$World.Share <- as.numeric(sub(' %','', pop_cost2$World.Share))
+# convert chr to numeric
+pop_cost2$Fert..Rate <- as.numeric(pop_cost2$Fert..Rate)
+pop_cost2$Med..Age <- as.numeric(pop_cost2$Med..Age)
+# convert int to numeric
+pop_cost2$Population..2020. <- as.numeric((pop_cost2$Population..2020.))
+pop_cost2$Net.Change <- as.numeric((pop_cost2$Net.Change))
+pop_cost2$`Density (P/Km^2)` <- as.numeric((pop_cost2$`Density (P/Km^2)`))
+pop_cost2$`Land.Area..KmÂ².` <- as.numeric((pop_cost2$`Land.Area..KmÂ².`))
+pop_cost2 <- pop_cost2 %>% rename(  # change to more practical (shorter) names
+  CoL.idx = Cost.of.Living.Index,
+  Groc.idx = Groceries.Index,
+  RP.idx = Restaurant.Price.Index,
+  LPP.idx = Local.Purchasing.Power.Index,
+  Pop.2020 = Population..2020.,
+  Migr.net = Migrants..net.,
+  Fert = Fert..Rate,
+  Med.age = Med..Age,
+  Urban.pop = Urban.Pop..,
+  `P/Km^2` = `Density (P/Km^2)`
+  
+)
+```
+
+```{r cormatrix}
+# make cor matrix
+pop_num <- pop_cost2 %>%
+  select_if(is.numeric) %>%
+  drop_na()
+  # omit rows not contributing to narrative
+pop_cormat <- pop_num %>%
+  select(-c(Cost.of.Living.Plus.Rent.Index, `Land.Area..KmÂ².`, 
+            World.Share,Med.age,Yearly.Change, LPP.idx, RP.idx,Groc.idx)) 
+
+#make a heatmap
+cor(pop_cormat, use = 'pairwise.complete.obs') %>%
+  as.data.frame %>% # save as data frame
+  rownames_to_column %>% #convert row names to an explicit variable
+  # pivot so all correlations appear on the same col
+  pivot_longer(-1, names_to = 'other_var', values_to = 'correlation') %>%
+  ggplot(aes(rowname, other_var, fill=correlation)) +
+  # change bottom labels to be angled so they are visible
+  theme(axis.text.x = element_text(angle = 40, vjust = 0.5, hjust = 1))+
+  # heatmap with geom tile
+  geom_tile() +
+  # keep the tiles square shaped
+  coord_fixed(ratio = 1) +
+  # change color gradient
+  scale_fill_gradient2(low='red', mid='white', high='blue')+
+  #change text size and color
+  geom_text((aes(label = round(correlation, 2))), color = 'black', size = 3) +
+  labs(title = 'Correlation matrix for numeric variables of countries', x='',y='')
+  
+
+```
+
+#### 1. Population density has a weak positive cor with rent index.
+#### 2. Fertility rate has a weak neg relationship with CoL, % urban pop, Rent. This is characteristic of developing     countries.
+#### 3. Interestingly, there is a negative cor between Population and Net Migration.
+
+```{r plot 2}
+pop_cost2 %>%
+  # filter by in countries
+  filter(Net.in.or.out == 'in')%>%
+  # pop will be measured in milions
+  ggplot(aes(x = Urban.pop, y = Pop.2020/1000000)) +
+  labs(title = 'Population 2020 vs Urban Pop. Percentage for countries with net in migration',x = 'Urban Population %', y = 'Population 2020 (millions)')+
+  geom_point(size = 4, color = 'red') 
+```
+```{r plot 3}
+pop_cost2 %>%
+  # filter by out countries
+  filter(Net.in.or.out == 'out')%>%
+  ggplot(aes(x = Urban.pop, y = Pop.2020/1000000)) +
+  labs(title = 'Population 2020 vs Urban Pop. Percentage for countries with net out migration',x = 'Urban Population %', y = 'Population 2020 (millions)')+
+  geom_point(size = 4, color = 'blue') 
+```
+
+#### As reflected in the correlation matrix, there is little to no correlation between % urban pop and population. However, from the countries with a net in migration, the points are more concentrated towards a higher Urban Pop. %. This is reflective of the correlation between Urban Pop. % and Net migration.
+
+```{r scree}
+library(cluster)
+library(factoextra)
+
+# create pca
+pca <- pop_num %>%
+  # scale the mean and variance to zero
+  scale() %>%
+  prcomp()
+
+# variance percentage
+perc <- (pca$sdev^2/sum(pca$sdev^2))
+#make scree plot
+fviz_screeplot(pca,linecolor = 'red', barfill = 'green') + 
+  labs(title = 'Visualization of Eigenvalues')
+
+get_eig(pca)
+head(pca$rotation)
+```
+#### Column 1 and 2 have eig > 1 with a total variation > 5%. The cumulative proportion of variance between PC1 and PC2 > 80%, thus, cost of living and rent index satisfy all 3 conditions of Kaiser's rule.
+
+#### The positive correlation between urban pop % and cost of living is reflective of development and urbanization influences on a country's population. As well, Fertility Rate had a negative correlation with Urban Pop % which reflects the earlier demographic stages' high population growth but low development.
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

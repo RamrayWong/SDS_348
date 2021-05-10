@@ -1,0 +1,229 @@
+---
+title: "How do Pokemon stats influence capture rate?"
+author: "Ramray Wong"
+date: "4/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Introduction
+##### This dataset holds a list of Pokemon and their stats. It is different from the one used in class as it contains a more thorough description of a pokemon's stats which will be needed in this exploration. More specifically, we will be investigating how a pokemon's stats influence its capture rate.  
+```{r imports}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+pokemon <- read.csv('S:/S_download/The Complete Pokemon Dataset/pokemon.csv')
+pokemon <- pokemon %>%
+  select(name, everything()) # move name to the beginning of the data frame
+
+```
+#### EDA
+```{r basic plots}
+pokemon$capture_rate <- as.numeric(pokemon$capture_rate) # convert capture rate into numeric
+pokemon$is_legendary <- as.character(pokemon$is_legendary) # convert is_legendary to char
+pokemon %>% # create scatter that puts capture rate vs speed.
+  ggplot(aes(x = speed, y = capture_rate, color = is_legendary)) +
+  geom_point()
+```
+```{r data frames}
+pokemtx <- pokemon
+
+# convert to numerics
+pokemtx$is_legendary <- as.numeric(pokemtx$is_legendary)
+pokemtx$attack <- as.numeric(pokemtx$attack)
+pokemtx$defense <- as.numeric(pokemtx$defense)
+pokemtx$hp <- as.numeric(pokemtx$hp)
+pokemtx$speed <- as.numeric(pokemtx$speed)
+pokemtx$generation <- as.numeric(pokemtx$generation)
+
+# making correlation matrix
+pokemtx <- pokemtx %>% select_if(is.numeric) %>% drop_na() # take the numerics only
+# omit variables of non-interest
+pokemtx2 <- pokemtx %>% select(-c(against_bug:against_water, base_egg_steps:base_total, sp_attack, sp_defense, pokedex_number, experience_growth))
+```
+```{r cormat}
+#make a heatmap
+cor(pokemtx2, use = 'pairwise.complete.obs') %>%
+  as.data.frame %>% # save as data frame
+  rownames_to_column %>% #convert row names to an explicit variable
+  # pivot so all correlations appear on the same col
+  pivot_longer(-1, names_to = 'other_var', values_to = 'correlation') %>%
+  ggplot(aes(rowname, other_var, fill=correlation)) +
+  # change bottom labels to be angled so they are visible
+  theme(axis.text.x = element_text(angle = 40, vjust = 0.5, hjust = 1))+
+  # heatmap with geom tile
+  geom_tile() +
+  # keep the tiles square shaped
+  coord_fixed(ratio = 1) +
+  # change color gradient
+  scale_fill_gradient2(low='red', mid='white', high='blue')+
+  #change text size and color
+  geom_text((aes(label = round(correlation, 2))), color = 'black', size = 3) +
+  labs(title = 'Correlation matrix for numeric variables of ', x='',y='')
+```
+#### MANOVA
+```{r manova}
+pokemanova <- manova(cbind(hp, attack, speed, defense, capture_rate) ~ type1, data = pokemon)
+summary(pokemanova)
+```
+*We can see with significance that there were differences found among the 18 of Pokemon for at least one of the 4 different Pokemon stats (p val < 0.05, Pillai = 0.047611*
+
+```{r anova}
+summary.aov(pokemanova)
+```
+*Only for attack was it found that all generations differ significantly from each other (p < 0.05).*
+
+```{r pairwise t tests}
+# only attack was significant in the above part so there will be an additional t test for it
+pairwise.t.test(pokemon$hp,pokemon$type1, p.adj="none")
+pairwise.t.test(pokemon$attack,pokemon$type1, p.adj="none")
+pairwise.t.test(pokemon$speed,pokemon$type1, p.adj="none")
+pairwise.t.test(pokemon$defense,pokemon$type1, p.adj="none")
+pairwise.t.test(pokemon$capture_rate,pokemon$type1, p.adj="none")
+```
+*From the pairwise t tests we can see that there is much significance in the difference between the mean capture rate of dragon type1's with the other type1's There is also a significant difference between mean defense stat between steel type1's and other type1's. *
+
+*A type I error is when a true null hypothesis is rejected. In this case, it would be to reject the null hypothesis that there is no difference in the mean attack stat across the 7 generations, give this hypothesis is true.*
+```{r Bonferroni}
+num_tests <- 1 + 5 + 5
+Prob_type_I <- 1 - (0.95)^num_tests
+Bonfer <- Prob_type_I/num_tests
+Prob_type_I
+Bonfer
+```
+*The probability that a Type I error has occurred is 0.4311999. The Bonferroni significance level is 0.03919999. The post-hoc test did not become non-significant after correction.*
+
+#### Randomization Test
+
+```{r random sample}
+# Check observed diff in defense stat between steel and normal
+obs_diff <- mean(pokemon$capture_rate[pokemon$type1 == 'normal']) - 
+  mean(pokemon$capture_rate[pokemon$type1 == 'dragon'])
+
+drag_norm <- pokemon %>% filter(type1 == 'dragon' | type1 == 'normal')
+
+set.seed(666)
+mean_diff_def <- vector()
+for(i in 1:5000){
+  temp <- data.frame(type = drag_norm$type1, capture_rate = sample(drag_norm$capture_rate))
+  mean_diff_def[i] <- temp %>%
+    group_by(type) %>%
+    summarise(means = mean(capture_rate)) %>%
+    summarise(means_diff = diff(means)) %>%
+    pull
+}
+```
+```{r hist}
+{hist(mean_diff_def, main="Distribution of the mean differences"); abline(v = -1*obs_diff, col="red")}
+
+```
+*Based on this randomization test, we can reject the null that there is no difference in mean capture rate between dragon and normal type Pokemon* 
+
+#### Linear Regression
+```{r}
+pokemon_l <- pokemon
+
+pokemon_l$attack <- pokemon_l$attack - mean(pokemon_l$attack, na.rm = TRUE)
+
+pokemon_l$hp <- pokemon_l$hp - mean(pokemon_l$hp, na.rm = TRUE)
+
+fit <- lm(capture_rate ~ hp + attack + attack*hp, data = pokemon_l)
+
+summary(fit)
+summary(lm(capture_rate ~ hp + attack + attack*hp, data = pokemon_l))$r.squared
+```
+```{r visualize plot}
+ggplot(pokemon, aes(y = capture_rate,x = attack, color = hp)) +
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  scale_color_gradient2(low='red', mid='white', high='blue') +
+  xlab("Pokemon Attack stat") +
+  ylab("Pokemon Capture Rate") + 
+  ggtitle("Pokemon Capture Rate vs Attack stat")
+
+```
+*The mean capture rate of a Pokemon is 96.382529 if it is of 0 attack and 0 defense. Capture rate decreases by -0.863871 per unit increase in hp and decreases -0.914936 per unit increase in attack. 34.34% of the variation in the responses is explained by this model.*
+
+```{r check assumptions}
+plot(fit, which = 1)
+
+hist(fit$residuals)
+
+plot(fit, which = 2)
+
+
+```
+*We can say the normality assumption has been met because there is a decreasing pattern in the residuals, and the QQ plot sees most of the points falling on the straight line.*
+
+```{r bootstrapping}
+pokemon_nona <- na.omit(pokemon)
+fit <- lm(capture_rate ~ hp + attack + hp * attack, data = pokemon_nona)
+
+##  Bootstrap from observations
+# Repeat bootstrapping 5000 times, saving the coefficients each time
+samp_SEs <- replicate(5000, {
+  # Bootstrap your data (resample observations)
+  boot_data <- sample_frac(pokemon_nona, replace = TRUE)
+  # Fit regression model
+  fitboot <- lm(capture_rate ~ hp * attack, data = boot_data)
+  # Save the coefficients
+  coef(fitboot)
+})
+
+# Estimated SEs
+samp_SEs %>%
+  # Transpose the obtained matrices
+  t %>%
+  # Consider the matrix as a data frame
+  as.data.frame %>%
+  # Compute the standard error (standard deviation of the sampling distribution)
+  summarize_all(sd)
+```
+```{r}
+
+##  Bootstrap from residuals
+# Repeat bootstrapping 5000 times, saving the coefficients each time
+resids_SEs <- replicate(5000, {
+  # Bootstrap your residuals (resample with replacement)
+  new_resids <- sample(fit$residuals, replace = TRUE)
+  # Consider a new response as fitted values plus residuals
+  boot_data <- pokemon_nona 
+  boot_data$capture_rate = fit$fitted.values + new_resids
+  # Fit regression model
+  fitboot <- lm(capture_rate ~ hp * attack, data = boot_data)
+  # Save the coefficients
+  coef(fitboot)
+})
+
+# Estimated SEs
+resids_SEs %>%
+  # Transpose the obtained matrices
+  t %>%
+  # Consider the matrix as a data frame
+  as.data.frame %>%
+  # Compute the standard error (standard deviation of the sampling distribution)
+  summarize_all(sd)
+```
+*The interaction terms, hp and attack, are still significant in comparison to the original model. The standard errors for hp and attack are different from the original model but since the p value was sufficiently low, they remain significant.*
+
+#### Logistical regression
+```{r logistical}
+# our binary variable is whether a pokemon is legendary. 0 means non-legendary.
+pokemon$is_legendary <- as.numeric(pokemon$is_legendary)
+
+fit_leg <- glm(is_legendary ~ capture_rate + attack, data = pokemon, family = 'binomial')
+summary(fit_leg)
+exp(coefficients(fit_leg))
+```
+*The odds that a pokemon is legendary are 0.922 times for a pokemon with a high capture rate than the odds for a pokemon with a high attack while the odds of a pokemon being legendary are 1.018 times for a pokemon with high attack than the odds are for high capture rate.*
+```{r}
+```
